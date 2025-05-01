@@ -22,8 +22,6 @@ $ALPN = $null
 $IPv4Hint = $null
 $IPv6Hint = $null
 $ECHConfig = $null
-# 注意：移除了 $DoHTarget
-# 注意：移除了 $DoHPath
 $Modelist = $null
 $Params = $null
 
@@ -51,8 +49,6 @@ if (Test-Path -Path $ConfigFile) {
             $IPv4Hint = $Config.svcb.ipv4hint
             $IPv6Hint = $Config.svcb.ipv6hint
             $ECHConfig = $Config.svcb.echconfig
-            # 注意：不再读取 dohtarget
-            # 注意：不再读取 dohpath
             $Modelist = $Config.svcb.modelist
             $Params = $Config.svcb.params
         } else {
@@ -91,10 +87,32 @@ if (-not $DNSRecordName) {
 $DNSRecordType = $DNSRecordType -or "SVCB"
 $TTL = $TTL -or 60
 
-# 检查 SVCB 记录配置是否完整 (这里我们假设 priority, target, port 是必需的)
-if (-not $Priority -or -not $Target -or -not $Port) {
-    Write-Error "缺少 SVCB 记录的必要配置 (priority, target, port)，请检查配置文件。"
+# 检查 SVCB 记录配置是否完整
+if (-not $Priority -or -not $Target) {
+    Write-Error "缺少 SVCB 记录的必要配置 (priority, target)，请检查配置文件。"
     exit 1
+}
+
+# 检查是否至少配置了 ipv4hint, ipv6hint, port, alpn, echconfig, modelist 或 params 中的一个
+if (-not $Port -and -not $ALPN -and -not $IPv4Hint -and -not $IPv6Hint -and -not $ECHConfig -and -not $Modelist -and -not $Params) {
+    Write-Error "SVCB 记录至少需要配置 ipv4hint, ipv6hint, port, alpn, echconfig, modelist 或 params 中的一个，建议检查配置文件。"
+    # 注意：这里我选择发出警告而不是直接退出，因为在某些特殊场景下，可能存在不需要这些参数的情况。
+    # 如果你希望强制至少配置一个，可以将 Write-Warning 替换为 Write-Error 并添加 
+    exit 1
+}
+
+# 针对 target 为 "." 的情况，建议配置 IP 提示
+if ($Target -eq ".") {
+    if (-not $IPv4Hint -and -not $IPv6Hint) {
+        Write-Warning "当 target 为 '.' 时，建议至少配置 ipv4hint 或 ipv6hint 中的一个。"
+    }
+}
+
+# 针对 _https 服务，建议配置 ALPN
+if ($DNSRecordName -like "_https._*") {
+    if (-not $ALPN) {
+        Write-Warning "对于 _https 服务，建议配置 alpn 参数。"
+    }
 }
 
 # 构建 SVCB 记录的 Content 字符串
@@ -111,8 +129,6 @@ if ($IPv6Hint) {
 if ($ECHConfig) {
     $SVCBContentParts += ",echconfig=" + $ECHConfig
 }
-# 注意：不再包含 dohtarget 的处理
-# 注意：不再包含 dohpath 的处理
 if ($Modelist) {
     $SVCBContentParts += ",modelist=" + $Modelist
 }
