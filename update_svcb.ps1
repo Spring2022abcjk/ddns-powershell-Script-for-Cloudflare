@@ -22,8 +22,8 @@ $ALPN = $null
 $IPv4Hint = $null
 $IPv6Hint = $null
 $ECHConfig = $null
-$DoHTarget = $null
-$DoHPath = $null
+# 注意：移除了 $DoHTarget
+# 注意：移除了 $DoHPath
 $Modelist = $null
 $Params = $null
 
@@ -51,8 +51,8 @@ if (Test-Path -Path $ConfigFile) {
             $IPv4Hint = $Config.svcb.ipv4hint
             $IPv6Hint = $Config.svcb.ipv6hint
             $ECHConfig = $Config.svcb.echconfig
-            $DoHTarget = $Config.svcb.dohtarget
-            $DoHPath = $Config.svcb.dohpath
+            # 注意：不再读取 dohtarget
+            # 注意：不再读取 dohpath
             $Modelist = $Config.svcb.modelist
             $Params = $Config.svcb.params
         } else {
@@ -111,12 +111,8 @@ if ($IPv6Hint) {
 if ($ECHConfig) {
     $SVCBContentParts += ",echconfig=" + $ECHConfig
 }
-if ($DoHTarget) {
-    $SVCBContentParts += ",dohtarget=" + $DoHTarget
-}
-if ($DoHPath) {
-    $SVCBContentParts += ",dohpath=" + $DoHPath
-}
+# 注意：不再包含 dohtarget 的处理
+# 注意：不再包含 dohpath 的处理
 if ($Modelist) {
     $SVCBContentParts += ",modelist=" + $Modelist
 }
