@@ -13,7 +13,6 @@ $CloudflareEmail = $null
 $DNSRecordName = $null
 $DNSRecordType = $null
 $TTL = $null
-$Proxied = $null
 
 # 定义变量存储 SVCB 记录配置
 $Priority = $null
@@ -40,7 +39,6 @@ if (Test-Path -Path $ConfigFile) {
             $DNSRecordName = $Config.cloudflare.dns_record_name
             $DNSRecordType = $Config.cloudflare.dns_record_type
             $TTL = $Config.cloudflare.ttl
-            $Proxied = $Config.cloudflare.proxied
         } else {
             Write-Warning "配置文件中缺少 [cloudflare] 部分，将尝试读取环境变量。"
         }
@@ -92,7 +90,6 @@ if (-not $DNSRecordName) {
 }
 $DNSRecordType = $DNSRecordType -or "SVCB"
 $TTL = $TTL -or 60
-$Proxied = $Proxied -or $false
 
 # 检查 SVCB 记录配置是否完整 (这里我们假设 priority, target, port 是必需的)
 if (-not $Priority -or -not $Target -or -not $Port) {
@@ -124,7 +121,7 @@ if ($Modelist) {
     $SVCBContentParts += ",modelist=" + $Modelist
 }
 if ($Params) {
-    $SVCBContentParts += "," + ($Params -join ",") # 注意逗号分隔多个 params
+    $SVCBContentParts += "," + ($Params -join ",")
 }
 $SVCBContent = $SVCBContentParts
 
@@ -155,7 +152,6 @@ $Body = @{
     name = $DNSRecordName
     content = $SVCBContent
     ttl = $TTL
-    proxied = $Proxied
 } | ConvertTo-Json
 
 # 更新 DNS 记录
