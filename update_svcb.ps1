@@ -1,13 +1,12 @@
 Import-Module -Name PSToml
 
 # 定义配置文件路径
-$ConfigFile = "C:\path\to\your\cloudflare_svcb_config.toml"
+$ConfigFile = "E:\桌面\edit\ddns\config.toml"
 
 # 定义变量存储 API 配置
-$APIKey = $null
+$ApiToken = $null
 $AccountID = $null
 $ZoneID = $null
-$CloudflareEmail = $null
 
 # 定义变量存储 DNS 记录配置
 $DNSRecordName = $null
@@ -30,10 +29,9 @@ if (Test-Path -Path $ConfigFile) {
     try {
         $Config = Get-Content -Path $ConfigFile -Raw | ConvertFrom-Toml
         if ($Config.cloudflare) {
-            $APIKey = $Config.cloudflare.api_key
+            $ApiToken = $Config.cloudflare.api_key
             $AccountID = $Config.cloudflare.account_id
             $ZoneID = $Config.cloudflare.zone_id
-            $CloudflareEmail = $Config.cloudflare.email
             $DNSRecordName = $Config.cloudflare.dns_record_name
             $DNSRecordType = $Config.cloudflare.dns_record_type
             $TTL = $Config.cloudflare.ttl
@@ -63,14 +61,13 @@ if (Test-Path -Path $ConfigFile) {
 }
 
 # 如果从配置文件中没有成功读取到所有必要的 API 配置，则尝试从环境变量中读取
-if (-not $APIKey -or -not $AccountID -or -not $ZoneID -or -not $CloudflareEmail) {
+if (-not $ApiToken -or -not $AccountID -or -not $ZoneID) {
     Write-Host "从环境变量中读取 Cloudflare API 配置..."
-    $APIKey = $env:CLOUDFLARE_API_KEY
+    $ApiToken = $env:CLOUDFLARE_API_KEY
     $AccountID = $env:CLOUDFLARE_ACCOUNT_ID
     $ZoneID = $env:CLOUDFLARE_ZONE_ID
-    $CloudflareEmail = $env:CLOUDFLARE_EMAIL
 
-    if (-not $APIKey -or -not $AccountID -or -not $ZoneID -or -not $CloudflareEmail) {
+    if (-not $ApiToken -or -not $AccountID -or -not $ZoneID) {
         Write-Error "未找到 Cloudflare API 的相关配置 (配置文件或环境变量中)，请检查配置。"
         exit 1
     }
@@ -84,8 +81,8 @@ if (-not $DNSRecordName) {
         exit 1
     }
 }
-$DNSRecordType = $DNSRecordType -or "SVCB"
-$TTL = $TTL -or 60
+$DNSRecordType = $DNSRecordType ? $DNSRecordType : "SVCB"
+$TTL = $TTL ? $TTL : 60
 
 # 检查 SVCB 记录配置是否完整
 if (-not $Priority -or -not $Target) {
@@ -139,8 +136,7 @@ $SVCBContent = $SVCBContentParts
 
 # 构建 Cloudflare API 请求的 Headers
 $Headers = @{
-    "X-Auth-Email" = $CloudflareEmail
-    "X-Auth-Key" = $APIKey
+    "Authorization" = "Bearer $ApiToken"
     "Content-Type" = "application/json"
 }
 
@@ -154,17 +150,36 @@ try {
     }
     $RecordID = $DNSRecordInfo.result[0].id
 } catch {
-    Write-Error "获取 DNS 记录信息失败: $($_.Exception.Message)"
+    Write-Error "获取 DNS 记录信息失败: $($_.Exception.Message)。详细信息：$($_.Exception.Response.Content)"
+    Write-Host "$DNSRecordIDUrl"
     exit 1
 }
 
-# 构建更新 DNS 记录的 Body
+# 构建SVCB记录的服务参数字符串
+$svcParamStr = ""
+$paramList = @()
+
+if ($Port) { $paramList += "port=""$Port""" }
+if ($ALPN) { $paramList += "alpn=""$($ALPN -join ',')""" }
+if ($IPv4Hint) { $paramList += "ipv4hint=$($IPv4Hint -join ',')" }
+if ($IPv6Hint) { $paramList += "ipv6hint=""$($IPv6Hint -join ',')""" }
+if ($ECHConfig) { $paramList += "echconfig=$ECHConfig" }
+if ($Modelist) { $paramList += "modelist=$Modelist" }
+
+$svcParamStr = $paramList -join " "
+
+# 构建符合Cloudflare API期望的Body
 $Body = @{
     type = $DNSRecordType
     name = $DNSRecordName
-    content = $SVCBContent
     ttl = $TTL
-} | ConvertTo-Json
+    comment = "Updated by SVCB update script"
+    data = @{
+        priority = [int]$Priority
+        target = $Target
+        value = $svcParamStr
+    }
+} | ConvertTo-Json -Depth 5
 
 # 更新 DNS 记录
 $UpdateDNSUrl = "https://api.cloudflare.com/client/v4/zones/$ZoneID/dns_records/$RecordID"
@@ -175,11 +190,22 @@ try {
     Write-Host "API 响应:" ($UpdateResult | ConvertTo-Json -Depth 5)
     # 或者，你可以检查特定的属性，例如 $UpdateResult.success
     if ($UpdateResult.success) {
-        # 可以执行一些成功的后续操作
+        Write-Host "DNS 记录更新成功。"
     } else {
         Write-Warning "API 返回更新成功的状态为 False，请检查响应信息。"
     }
 } catch {
-    Write-Error "更新 DNS 记录失败: $($_.Exception.Message)"
-    # 可以选择输出更详细的错误信息，例如 $_.Exception.Response.Content
+    $errorDetail = $_.ErrorDetails.Message
+    if (-not $errorDetail) {
+        try { $errorDetail = $_.Exception.Response.Content }
+        catch { $errorDetail = "无法获取详细错误信息" }
+    }
+    
+    Write-Error "更新 DNS 记录失败: $($_.Exception.Message)`n详细信息: $errorDetail"
+    Write-Host "请求URL: $UpdateDNSUrl"
+    Write-Host "请求内容: $Body"
 }
+
+# $GetRecordUrl = "https://api.cloudflare.com/client/v4/zones/$ZoneID/dns_records?type=SVCB&per_page=1"
+# $ExampleRecord = Invoke-RestMethod -Uri $GetRecordUrl -Headers $Headers -Method Get
+# $ExampleRecord.result | ConvertTo-Json -Depth 5
