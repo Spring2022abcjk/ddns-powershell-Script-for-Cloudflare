@@ -1,45 +1,23 @@
+param(
+    [string]$ConfigPath
+)
+
 Import-Module -Name PSToml
 
-# 如果未指定配置文件路径，则使用脚本所在目录下的config.toml
-if (-not $ConfigPath) {
-    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-    $ConfigFile = Join-Path -Path $ScriptDir -ChildPath "config.toml"
-} else {
-    $ConfigFile = $ConfigPath
+# 导入配置模块
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. "$ScriptDir\Cloudflare_Config.ps1"
+
+# 获取配置
+$Config = Get-CloudflareConfig -ConfigPath $ConfigPath
+
+if (-not $Config.Success) {
+    Write-Error $Config.ErrorMessage
+    exit 1
 }
 
-Write-Host "使用配置文件: $ConfigFile"
-
-$API_TOKEN = $null
-
-if (Test-Path -Path $ConfigFile) {
-    try {
-        $Config = Get-Content -Path $ConfigFile -Raw | ConvertFrom-Toml
-        if ($Config.cloudflare) {
-            $API_TOKEN = $Config.cloudflare.api_key
-        }
-        else {
-            Write-Warning "配置文件中缺少 [cloudflare] 部分，将尝试读取环境变量。"
-        }
-    }
-    catch {
-        Write-Warning "读取或解析配置文件失败: $($_.Exception.Message)，将尝试读取环境变量。"
-    }
-}
-else {
-    Write-Warning "配置文件不存在: $ConfigFile，将尝试读取环境变量。"
-}
-
-if (-not $Api_Token) {
-    Write-Host "从环境变量中读取 Cloudflare API 配置..."
-    $Api_Token = $env:CLOUDFLARE_API_KEY
-
-    if (-not $Api_Token) {
-        Write-Error "未找到 Cloudflare API 的相关配置 (配置文件或环境变量中)，请检查配置。"
-        exit 1
-    }
-}
-
+# 提取必要的配置值
+$API_TOKEN = $Config.ApiToken
 
 function Get-ZoneId {
     param (

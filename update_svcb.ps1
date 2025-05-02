@@ -5,98 +5,42 @@ param(
 
 Import-Module -Name PSToml
 
-# 如果未指定配置文件路径，则使用脚本所在目录下的config.toml
-if (-not $ConfigPath) {
-    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-    $ConfigFile = Join-Path -Path $ScriptDir -ChildPath "config.toml"
-} else {
-    $ConfigFile = $ConfigPath
+# 导入配置模块
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. "$ScriptDir\Cloudflare_Config.ps1"
+
+# 获取配置
+$Config = Get-CloudflareConfig -ConfigPath $ConfigPath -RequireSVCB
+
+if (-not $Config.Success) {
+    Write-Error $Config.ErrorMessage
+    exit 1
 }
 
-Write-Host "使用配置文件: $ConfigFile"
+# 提取配置值
+$ApiToken = $Config.ApiToken
+$ZoneID = $Config.ZoneID
+$DNSRecordName = $Config.DNSRecordName
+$DNSRecordType = $Config.DNSRecordType
+$TTL = $Config.TTL
 
-# 定义变量存储 API 配置
-$ApiToken = $null
-$AccountID = $null
-$ZoneID = $null
+# SVCB 特定配置
+$Priority = $Config.SVCB.Priority
+$Target = $Config.SVCB.Target
+$Port = $Config.SVCB.Port
+$ALPN = $Config.SVCB.ALPN
+$IPv4Hint = $Config.SVCB.IPv4Hint
+$IPv6Hint = $Config.SVCB.IPv6Hint
+$ECHConfig = $Config.SVCB.ECHConfig
+$Modelist = $Config.SVCB.Modelist
+$Params = $Config.SVCB.Params
+$Comment = $Config.SVCB.Comment
 
-# 定义变量存储 DNS 记录配置
-$DNSRecordName = $null
-$DNSRecordType = $null
-$TTL = $null
-
-# 定义变量存储 SVCB 记录配置
-$Priority = $null
-$Target = $null
-$Port = $null
-$ALPN = $null
-$IPv4Hint = $null
-$IPv6Hint = $null
-$ECHConfig = $null
-$Modelist = $null
-$Params = $null
-
-# 尝试从配置文件读取配置
-if (Test-Path -Path $ConfigFile) {
-    try {
-        $Config = Get-Content -Path $ConfigFile -Raw | ConvertFrom-Toml
-        if ($Config.cloudflare) {
-            $ApiToken = $Config.cloudflare.api_key
-            $AccountID = $Config.cloudflare.account_id
-            $ZoneID = $Config.cloudflare.zone_id
-            $DNSRecordName = $Config.cloudflare.dns_record_name
-            $DNSRecordType = $Config.cloudflare.dns_record_type
-            $TTL = $Config.cloudflare.ttl
-        } else {
-            Write-Warning "配置文件中缺少 [cloudflare] 部分，将尝试读取环境变量。"
-        }
-
-        if ($Config.svcb) {
-            $Priority = $Config.svcb.priority
-            $Target = $Config.svcb.target
-            $Port = $Config.svcb.port
-            $ALPN = $Config.svcb.alpn
-            $IPv4Hint = $Config.svcb.ipv4hint
-            $IPv6Hint = $Config.svcb.ipv6hint
-            $ECHConfig = $Config.svcb.echconfig
-            $Modelist = $Config.svcb.modelist
-            $Params = $Config.svcb.params
-            $Comment = $Config.svcb.comment
-        } else {
-            Write-Warning "配置文件中缺少 [svcb] 部分，将使用默认的 SVCB 配置或尝试从环境变量读取（如果适用）。"
-        }
-
-    } catch {
-        Write-Warning "读取或解析配置文件失败: $($_.Exception.Message)，将尝试读取环境变量。"
-    }
-} else {
-    Write-Warning "配置文件不存在: $ConfigFile，将尝试读取环境变量。"
-}
-
-# 如果从配置文件中没有成功读取到所有必要的 API 配置，则尝试从环境变量中读取
-if (-not $ApiToken -or -not $AccountID -or -not $ZoneID) {
-    Write-Host "从环境变量中读取 Cloudflare API 配置..."
-    $ApiToken = $env:CLOUDFLARE_API_KEY
-    $AccountID = $env:CLOUDFLARE_ACCOUNT_ID
-    $ZoneID = $env:CLOUDFLARE_ZONE_ID
-
-    if (-not $ApiToken -or -not $AccountID -or -not $ZoneID) {
-        Write-Error "未找到 Cloudflare API 的相关配置 (配置文件或环境变量中)，请检查配置。"
-        exit 1
-    }
-}
-
-# 从环境变量中读取 DNS 记录配置 (如果配置文件中没有)
+# 验证必要的 DNS 记录配置
 if (-not $DNSRecordName) {
-    $DNSRecordName = $env:CLOUDFLARE_DNS_RECORD_NAME
-    if (-not $DNSRecordName) {
-        Write-Error "缺少 DNS 记录名称 (DNSRecordName)，请在配置文件或环境变量中设置。"
-        exit 1
-    }
+    Write-Error "缺少 DNS 记录名称 (DNSRecordName)，请在配置文件或环境变量中设置。"
+    exit 1
 }
-$DNSRecordType = $DNSRecordType ? $DNSRecordType : "SVCB"
-$TTL = $TTL ? $TTL : 60
-$comment = $Comment ? $Comment : "使用脚本更新的dns记录"
 
 # 检查 SVCB 记录配置是否完整
 if (-not $Priority -or -not $Target) {
@@ -107,8 +51,6 @@ if (-not $Priority -or -not $Target) {
 # 检查是否至少配置了 ipv4hint, ipv6hint, port, alpn, echconfig, modelist 或 params 中的一个
 if (-not $Port -and -not $ALPN -and -not $IPv4Hint -and -not $IPv6Hint -and -not $ECHConfig -and -not $Modelist -and -not $Params) {
     Write-Error "SVCB 记录至少需要配置 ipv4hint, ipv6hint, port, alpn, echconfig, modelist 或 params 中的一个，建议检查配置文件。"
-    # 注意：这里我选择发出警告而不是直接退出，因为在某些特殊场景下，可能存在不需要这些参数的情况。
-    # 如果你希望强制至少配置一个，可以将 Write-Warning 替换为 Write-Error 并添加 
     exit 1
 }
 
