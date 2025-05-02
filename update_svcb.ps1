@@ -1,7 +1,19 @@
+# 定义配置文件路径参数
+param(
+    [string]$ConfigPath
+)
+
 Import-Module -Name PSToml
 
-# 定义配置文件路径
-$ConfigFile = "E:\桌面\edit\ddns\config.toml"
+# 如果未指定配置文件路径，则使用脚本所在目录下的config.toml
+if (-not $ConfigPath) {
+    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+    $ConfigFile = Join-Path -Path $ScriptDir -ChildPath "config.toml"
+} else {
+    $ConfigFile = $ConfigPath
+}
+
+Write-Host "使用配置文件: $ConfigFile"
 
 # 定义变量存储 API 配置
 $ApiToken = $null
@@ -49,6 +61,7 @@ if (Test-Path -Path $ConfigFile) {
             $ECHConfig = $Config.svcb.echconfig
             $Modelist = $Config.svcb.modelist
             $Params = $Config.svcb.params
+            $Comment = $Config.svcb.comment
         } else {
             Write-Warning "配置文件中缺少 [svcb] 部分，将使用默认的 SVCB 配置或尝试从环境变量读取（如果适用）。"
         }
@@ -83,6 +96,7 @@ if (-not $DNSRecordName) {
 }
 $DNSRecordType = $DNSRecordType ? $DNSRecordType : "SVCB"
 $TTL = $TTL ? $TTL : 60
+$comment = $Comment ? $Comment : "使用脚本更新的dns记录"
 
 # 检查 SVCB 记录配置是否完整
 if (-not $Priority -or -not $Target) {
@@ -173,7 +187,7 @@ $Body = @{
     type = $DNSRecordType
     name = $DNSRecordName
     ttl = $TTL
-    comment = "Updated by SVCB update script"
+    comment = $Comment
     data = @{
         priority = [int]$Priority
         target = $Target
