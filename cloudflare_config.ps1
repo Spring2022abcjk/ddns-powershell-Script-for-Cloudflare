@@ -1,6 +1,7 @@
 function Get-CloudflareConfig {
     param (
-        [string]$ConfigPath,
+        [string]$CloudflareConfigPath,
+        [string]$RecordConfigPath,
         [switch]$RequireSVCB
     )
 
@@ -27,51 +28,116 @@ function Get-CloudflareConfig {
         }
     }
 
-    # 如果未指定配置文件路径，则使用脚本所在目录下的config.toml
-    if (-not $ConfigPath) {
-        $ScriptDir = Split-Path -Parent (Get-Variable MyInvocation -Scope 1).Value.MyCommand.Definition
-        $ConfigFile = Join-Path -Path $ScriptDir -ChildPath "config.toml"
+    $ScriptDir = Split-Path -Parent (Get-Variable MyInvocation -Scope 1).Value.MyCommand.Definition
+    
+    # 处理 Cloudflare 配置文件
+    if (-not $CloudflareConfigPath) {
+        $CloudflareConfigFile = Join-Path -Path $ScriptDir -ChildPath "cloudflare.toml"
     } else {
-        $ConfigFile = $ConfigPath
+        $CloudflareConfigFile = $CloudflareConfigPath
     }
-
-    Write-Host "使用配置文件: $ConfigFile"
-
-    # 尝试从配置文件读取配置
-    if (Test-Path -Path $ConfigFile) {
+    
+    Write-Host "使用 Cloudflare 配置文件: $CloudflareConfigFile"
+    
+    # 尝试从 Cloudflare 配置文件读取配置
+    if (Test-Path -Path $CloudflareConfigFile) {
         try {
-            $Config = Get-Content -Path $ConfigFile -Raw | ConvertFrom-Toml
-            if ($Config.cloudflare) {
-                $ConfigResult.ApiToken = $Config.cloudflare.api_key
-                $ConfigResult.AccountID = $Config.cloudflare.account_id
-                $ConfigResult.ZoneID = $Config.cloudflare.zone_id
-                $ConfigResult.DNSRecordName = $Config.cloudflare.dns_record_name
-                $ConfigResult.DNSRecordType = $Config.cloudflare.dns_record_type
-                $ConfigResult.TTL = $Config.cloudflare.ttl
+            $CloudflareConfig = Get-Content -Path $CloudflareConfigFile -Raw | ConvertFrom-Toml
+            if ($CloudflareConfig.cloudflare) {
+                # 处理 API Key
+                if ($CloudflareConfig.cloudflare.api_key) {
+                    # 检查是否是环境变量引用
+                    if ($CloudflareConfig.cloudflare.api_key -match '^\{env:(.+)\}$') {
+                        $envVarName = $matches[1]
+                        $ConfigResult.ApiToken = (Get-Item -Path "env:$envVarName" -ErrorAction SilentlyContinue).Value
+                        if (-not $ConfigResult.ApiToken) {
+                            Write-Warning "环境变量 $envVarName 不存在或为空，将尝试读取默认环境变量。"
+                        }
+                    } else {
+                        $ConfigResult.ApiToken = $CloudflareConfig.cloudflare.api_key
+                    }
+                }
+                
+                # 处理 Account ID
+                if ($CloudflareConfig.cloudflare.account_id) {
+                    # 检查是否是环境变量引用
+                    if ($CloudflareConfig.cloudflare.account_id -match '^\{env:(.+)\}$') {
+                        $envVarName = $matches[1]
+                        $ConfigResult.AccountID = (Get-Item -Path "env:$envVarName" -ErrorAction SilentlyContinue).Value
+                        if (-not $ConfigResult.AccountID) {
+                            Write-Warning "环境变量 $envVarName 不存在或为空，将尝试读取默认环境变量。"
+                        }
+                    } else {
+                        $ConfigResult.AccountID = $CloudflareConfig.cloudflare.account_id
+                    }
+                }
+                
+                # 处理 Zone ID
+                if ($CloudflareConfig.cloudflare.zone_id) {
+                    # 检查是否是环境变量引用
+                    if ($CloudflareConfig.cloudflare.zone_id -match '^\{env:(.+)\}$') {
+                        $envVarName = $matches[1]
+                        $ConfigResult.ZoneID = (Get-Item -Path "env:$envVarName" -ErrorAction SilentlyContinue).Value
+                        if (-not $ConfigResult.ZoneID) {
+                            Write-Warning "环境变量 $envVarName 不存在或为空，将尝试读取默认环境变量。"
+                        }
+                    } else {
+                        $ConfigResult.ZoneID = $CloudflareConfig.cloudflare.zone_id
+                    }
+                }
             } else {
-                Write-Warning "配置文件中缺少 [cloudflare] 部分，将尝试读取环境变量。"
+                Write-Warning "Cloudflare 配置文件中缺少 [cloudflare] 部分，将尝试读取环境变量。"
             }
-
-            if ($RequireSVCB -and $Config.svcb) {
-                $ConfigResult.SVCB.Priority = $Config.svcb.priority
-                $ConfigResult.SVCB.Target = $Config.svcb.target
-                $ConfigResult.SVCB.Port = $Config.svcb.port
-                $ConfigResult.SVCB.ALPN = $Config.svcb.alpn
-                $ConfigResult.SVCB.IPv4Hint = $Config.svcb.ipv4hint
-                $ConfigResult.SVCB.IPv6Hint = $Config.svcb.ipv6hint
-                $ConfigResult.SVCB.ECHConfig = $Config.svcb.echconfig
-                $ConfigResult.SVCB.Modelist = $Config.svcb.modelist
-                $ConfigResult.SVCB.Params = $Config.svcb.params
-                $ConfigResult.SVCB.Comment = $Config.svcb.comment
-            } elseif ($RequireSVCB) {
-                Write-Warning "配置文件中缺少 [svcb] 部分，将使用默认的 SVCB 配置或尝试从环境变量读取（如果适用）。"
-            }
-
         } catch {
-            Write-Warning "读取或解析配置文件失败: $($_.Exception.Message)，将尝试读取环境变量。"
+            Write-Warning "读取或解析 Cloudflare 配置文件失败: $($_.Exception.Message)，将尝试读取环境变量。"
         }
     } else {
-        Write-Warning "配置文件不存在: $ConfigFile，将尝试读取环境变量。"
+        Write-Warning "Cloudflare 配置文件不存在: $CloudflareConfigFile，将尝试读取环境变量。"
+    }
+    
+    # 如果需要 SVCB 记录配置，则处理记录配置文件
+    if ($RequireSVCB) {
+        if (-not $RecordConfigPath) {
+            $RecordConfigFile = Join-Path -Path $ScriptDir -ChildPath "svcb_record.toml"
+        } else {
+            $RecordConfigFile = $RecordConfigPath
+        }
+        
+        Write-Host "使用记录配置文件: $RecordConfigFile"
+        
+        # 尝试从记录配置文件读取配置
+        if (Test-Path -Path $RecordConfigFile) {
+            try {
+                $RecordConfig = Get-Content -Path $RecordConfigFile -Raw | ConvertFrom-Toml
+                
+                if ($RecordConfig.record) {
+                    $ConfigResult.DNSRecordName = $RecordConfig.record.dns_record_name
+                    $ConfigResult.DNSRecordType = $RecordConfig.record.dns_record_type
+                    $ConfigResult.TTL = $RecordConfig.record.ttl
+                } else {
+                    Write-Warning "记录配置文件中缺少 [record] 部分。"
+                }
+                
+                if ($RecordConfig.svcb) {
+                    $ConfigResult.SVCB.Priority = $RecordConfig.svcb.priority
+                    $ConfigResult.SVCB.Target = $RecordConfig.svcb.target
+                    $ConfigResult.SVCB.Port = $RecordConfig.svcb.port
+                    $ConfigResult.SVCB.ALPN = $RecordConfig.svcb.alpn
+                    $ConfigResult.SVCB.IPv4Hint = $RecordConfig.svcb.ipv4hint
+                    $ConfigResult.SVCB.IPv6Hint = $RecordConfig.svcb.ipv6hint
+                    $ConfigResult.SVCB.ECHConfig = $RecordConfig.svcb.echconfig
+                    $ConfigResult.SVCB.Modelist = $RecordConfig.svcb.modelist
+                    $ConfigResult.SVCB.Params = $RecordConfig.svcb.params
+                    $ConfigResult.SVCB.Comment = $RecordConfig.svcb.comment
+                } else {
+                    Write-Warning "记录配置文件中缺少 [svcb] 部分。"
+                }
+            } catch {
+                Write-Warning "读取或解析记录配置文件失败: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Warning "记录配置文件不存在: $RecordConfigFile"
+        }
     }
 
     # 如果从配置文件中没有成功读取到所有必要的 API 配置，则尝试从环境变量中读取

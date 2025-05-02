@@ -1,5 +1,5 @@
 param(
-    [string]$ConfigPath
+    [string]$CloudflareConfigPath
 )
 
 Import-Module -Name PSToml
@@ -8,8 +8,8 @@ Import-Module -Name PSToml
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . "$ScriptDir\Cloudflare_Config.ps1"
 
-# 获取配置
-$Config = Get-CloudflareConfig -ConfigPath $ConfigPath
+# 获取配置 (不需要 SVCB 记录配置)
+$Config = Get-CloudflareConfig -CloudflareConfigPath $CloudflareConfigPath
 
 if (-not $Config.Success) {
     Write-Error $Config.ErrorMessage

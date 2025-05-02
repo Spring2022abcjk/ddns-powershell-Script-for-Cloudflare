@@ -1,6 +1,7 @@
 # 定义配置文件路径参数
 param(
-    [string]$ConfigPath
+    [string]$CloudflareConfigPath,
+    [string]$RecordConfigPath
 )
 
 Import-Module -Name PSToml
@@ -10,7 +11,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . "$ScriptDir\Cloudflare_Config.ps1"
 
 # 获取配置
-$Config = Get-CloudflareConfig -ConfigPath $ConfigPath -RequireSVCB
+$Config = Get-CloudflareConfig -CloudflareConfigPath $CloudflareConfigPath -RecordConfigPath $RecordConfigPath -RequireSVCB
 
 if (-not $Config.Success) {
     Write-Error $Config.ErrorMessage
@@ -161,7 +162,3 @@ try {
     Write-Host "请求URL: $UpdateDNSUrl"
     Write-Host "请求内容: $Body"
 }
-
-# $GetRecordUrl = "https://api.cloudflare.com/client/v4/zones/$ZoneID/dns_records?type=SVCB&per_page=1"
-# $ExampleRecord = Invoke-RestMethod -Uri $GetRecordUrl -Headers $Headers -Method Get
-# $ExampleRecord.result | ConvertTo-Json -Depth 5
