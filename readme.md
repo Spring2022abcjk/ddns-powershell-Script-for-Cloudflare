@@ -109,6 +109,15 @@ api_key = "{env:CF_API_TOKEN}"  # 将从环境变量 CF_API_TOKEN 读取值
 .\dns_list.ps1 -CloudflareConfigPath "path\to\cloudflare.toml" example.com
 ```
 
+## 快速入门
+
+1. 安装必要模块：`Install-Module -Name PSToml`
+2. 创建配置文件：
+   - 复制示例配置创建 `cloudflare.toml`（包含API凭据）
+   - 复制示例配置创建 `svcb_record.toml`（包含记录详情）
+3. 运行更新脚本：`.\update_svcb.ps1`
+4. 验证记录：`.\dns_list.ps1 你的域名`
+
 ## 注意事项
 - Priority 和 Target 是必需的 SVCB 参数
 - 至少需要以下参数之一：port、alpn、ipv4hint、ipv6hint、echconfig、modelist 或 params

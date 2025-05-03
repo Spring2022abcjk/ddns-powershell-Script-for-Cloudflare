@@ -18,6 +18,7 @@ if (-not $Config.Success) {
 
 # 提取必要的配置值
 $API_TOKEN = $Config.ApiToken
+$ZONE_ID = $Config.ZoneId
 
 function Get-ZoneId {
     param (
@@ -47,6 +48,27 @@ function Get-ZoneId {
     exit 1
 }
 
+function Get-ZoneInfo {
+    param (
+        [string]$ZoneId
+    )
+    
+    $url = "https://api.cloudflare.com/client/v4/zones/$ZoneId"
+    $headers = @{
+        "Authorization" = "Bearer $API_TOKEN"
+        "Content-Type" = "application/json"
+    }
+    
+    $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
+    
+    if (-not $response.success) {
+        Write-Host "错误: $($response.errors | ConvertTo-Json)"
+        exit 1
+    }
+    
+    return $response.result
+}
+
 function Get-DnsRecords {
     param (
         [string]$ZoneId
@@ -74,32 +96,45 @@ function Main {
         $InputArgs
     )
     
-    # 检查是否有命令行参数
-    if ($InputArgs.Count -eq 0) {
-        # 如果没有参数，提示用户输入域名
-        $domain = Read-Host "请输入要查询的域名"
-        if ([string]::IsNullOrWhiteSpace($domain)) {
-            Write-Host "错误: 域名不能为空"
-            exit 1
-        }
-    } elseif ($InputArgs.Count -eq 1) {
-        # 如果有一个参数，使用该参数作为域名
-        $domain = $InputArgs[0]
-    } else {
-        # 如果参数过多，显示用法
-        Write-Host "用法: $($MyInvocation.MyCommand.Name) [域名]"
-        Write-Host "      如果不提供域名参数，程序将提示您输入"
-        exit 1
-    }
-    
     if (-not $API_TOKEN) {
         Write-Host "错误: 未设置API_TOKEN变量"
         exit 1
     }
     
-    Write-Host "正在获取 $domain 的zone ID..."
-    $zoneId = Get-ZoneId -Domain $domain
-    Write-Host "Zone ID: $zoneId"
+    # 检查配置中是否已提供区域ID
+    if ($ZONE_ID) {
+        $zoneId = $ZONE_ID
+        
+        # 获取该区域ID对应的域名信息
+        $zoneInfo = Get-ZoneInfo -ZoneId $zoneId
+        $domain = $zoneInfo.name
+        
+        Write-Host "使用配置文件中的Zone ID: $zoneId (域名: $domain)"
+    }
+    else {
+        # 原有的域名输入/查询逻辑
+        # 检查是否有命令行参数
+        if ($InputArgs.Count -eq 0) {
+            # 如果没有参数，提示用户输入域名
+            $domain = Read-Host "请输入要查询的域名"
+            if ([string]::IsNullOrWhiteSpace($domain)) {
+                Write-Host "错误: 域名不能为空"
+                exit 1
+            }
+        } elseif ($InputArgs.Count -eq 1) {
+            # 如果有一个参数，使用该参数作为域名
+            $domain = $InputArgs[0]
+        } else {
+            # 如果参数过多，显示用法
+            Write-Host "用法: $($MyInvocation.MyCommand.Name) [域名]"
+            Write-Host "      如果不提供域名参数，程序将提示您输入"
+            exit 1
+        }
+        
+        Write-Host "正在获取 $domain 的zone ID..."
+        $zoneId = Get-ZoneId -Domain $domain
+        Write-Host "Zone ID: $zoneId"
+    }
     
     Write-Host "`n正在列出 $domain 的DNS记录..."
     $records = Get-DnsRecords -ZoneId $zoneId
