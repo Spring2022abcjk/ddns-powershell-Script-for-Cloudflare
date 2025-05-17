@@ -5,19 +5,26 @@ function Get-CloudflareApiConfig {
     )
     
     $ConfigResult = @{
-        Success = $true
+        Success      = $true
         ErrorMessage = $null
-        ApiToken = $null
-        AccountID = $null
-        ZoneID = $null
+        ApiToken     = $null
+        AccountID    = $null
+        ZoneID       = $null
     }
     
-    $ScriptDir = Split-Path -Parent (Get-Variable MyInvocation -Scope 1).Value.MyCommand.Definition
+    # 使用更可靠的方式获取脚本目录
+    $ScriptDir = $PSScriptRoot
+    
+    # 如果 $PSScriptRoot 为空，尝试使用当前路径
+    if ([string]::IsNullOrEmpty($ScriptDir)) {
+        $ScriptDir = $PWD.Path
+    }
     
     # 处理配置文件路径
     if (-not $CloudflareConfigPath) {
         $CloudflareConfigFile = Join-Path -Path $ScriptDir -ChildPath "cloudflare.toml"
-    } else {
+    }
+    else {
         $CloudflareConfigFile = $CloudflareConfigPath
     }
     
@@ -37,7 +44,8 @@ function Get-CloudflareApiConfig {
                         if (-not $ConfigResult.ApiToken) {
                             Write-Warning "环境变量 $envVarName 不存在或为空，将尝试读取默认环境变量。"
                         }
-                    } else {
+                    }
+                    else {
                         $ConfigResult.ApiToken = $CloudflareConfig.cloudflare.api_key
                     }
                 }
@@ -50,7 +58,8 @@ function Get-CloudflareApiConfig {
                         if (-not $ConfigResult.AccountID) {
                             Write-Warning "环境变量 $envVarName 不存在或为空，将尝试读取默认环境变量。"
                         }
-                    } else {
+                    }
+                    else {
                         $ConfigResult.AccountID = $CloudflareConfig.cloudflare.account_id
                     }
                 }
@@ -63,17 +72,21 @@ function Get-CloudflareApiConfig {
                         if (-not $ConfigResult.ZoneID) {
                             Write-Warning "环境变量 $envVarName 不存在或为空，将尝试读取默认环境变量。"
                         }
-                    } else {
+                    }
+                    else {
                         $ConfigResult.ZoneID = $CloudflareConfig.cloudflare.zone_id
                     }
                 }
-            } else {
+            }
+            else {
                 Write-Warning "Cloudflare 配置文件中缺少 [cloudflare] 部分，将尝试读取环境变量。"
             }
-        } catch {
+        }
+        catch {
             Write-Warning "读取或解析 Cloudflare 配置文件失败: $($_.Exception.Message)，将尝试读取环境变量。"
         }
-    } else {
+    }
+    else {
         Write-Warning "Cloudflare 配置文件不存在: $CloudflareConfigFile，将尝试读取环境变量。"
     }
     
@@ -109,22 +122,22 @@ function Get-DnsRecordConfig {
     )
     
     $ConfigResult = @{
-        Success = $true
-        ErrorMessage = $null
+        Success       = $true
+        ErrorMessage  = $null
         DNSRecordName = $null
         DNSRecordType = $PreferredRecordType
-        TTL = 60
+        TTL           = 60
         ServiceParams = @{
-            Priority = $null
-            Target = $null
-            Port = $null
-            ALPN = $null
-            IPv4Hint = $null
-            IPv6Hint = $null
+            Priority  = $null
+            Target    = $null
+            Port      = $null
+            ALPN      = $null
+            IPv4Hint  = $null
+            IPv6Hint  = $null
             ECHConfig = $null
-            Modelist = $null
-            Params = $null
-            Comment = "使用脚本更新的 $PreferredRecordType 记录"
+            Modelist  = $null
+            Params    = $null
+            Comment   = "使用脚本更新的 $PreferredRecordType 记录"
         }
     }
     
@@ -138,10 +151,12 @@ function Get-DnsRecordConfig {
         
         if (Test-Path -Path $TypeSpecificConfigFile) {
             $RecordConfigFile = $TypeSpecificConfigFile
-        } else {
+        }
+        else {
             $RecordConfigFile = $GenericConfigFile
         }
-    } else {
+    }
+    else {
         $RecordConfigFile = $RecordConfigPath
     }
     
@@ -164,7 +179,8 @@ function Get-DnsRecordConfig {
                 if ($RecordConfig.record.ttl) {
                     $ConfigResult.TTL = $RecordConfig.record.ttl
                 }
-            } else {
+            }
+            else {
                 Write-Warning "记录配置文件中缺少 [record] 部分。"
             }
             
@@ -196,15 +212,18 @@ function Get-DnsRecordConfig {
                 if ($serviceSection.comment) {
                     $ConfigResult.ServiceParams.Comment = $serviceSection.comment
                 }
-            } else {
+            }
+            else {
                 Write-Warning "记录配置文件中缺少 [$recordTypeLower] 或 [service_params] 部分。"
             }
-        } catch {
+        }
+        catch {
             Write-Warning "读取或解析记录配置文件失败: $($_.Exception.Message)"
             $ConfigResult.Success = $false
             $ConfigResult.ErrorMessage = "读取记录配置文件失败: $($_.Exception.Message)"
         }
-    } else {
+    }
+    else {
         Write-Warning "记录配置文件不存在: $RecordConfigFile"
         $ConfigResult.DNSRecordName = $env:CLOUDFLARE_DNS_RECORD_NAME
     }
@@ -227,25 +246,25 @@ function Get-CloudflareConfig {
     
     # 创建返回值对象
     $ConfigResult = @{
-        Success = $true
-        ErrorMessage = $null
-        ApiToken = $null
-        AccountID = $null
-        ZoneID = $null
+        Success       = $true
+        ErrorMessage  = $null
+        ApiToken      = $null
+        AccountID     = $null
+        ZoneID        = $null
         DNSRecordName = $null
         DNSRecordType = $PreferredRecordType
-        TTL = 60
+        TTL           = 60
         ServiceParams = @{
-            Priority = $null
-            Target = $null
-            Port = $null
-            ALPN = $null
-            IPv4Hint = $null
-            IPv6Hint = $null
+            Priority  = $null
+            Target    = $null
+            Port      = $null
+            ALPN      = $null
+            IPv4Hint  = $null
+            IPv6Hint  = $null
             ECHConfig = $null
-            Modelist = $null
-            Params = $null
-            Comment = "使用脚本更新的DNS记录"
+            Modelist  = $null
+            Params    = $null
+            Comment   = "使用脚本更新的DNS记录"
         }
     }
     

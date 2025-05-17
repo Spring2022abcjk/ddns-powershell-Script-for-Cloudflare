@@ -28,7 +28,7 @@ function Get-ZoneId {
     $url = "https://api.cloudflare.com/client/v4/zones"
     $headers = @{
         "Authorization" = "Bearer $API_TOKEN"
-        "Content-Type" = "application/json"
+        "Content-Type"  = "application/json"
     }
     
     $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
@@ -56,7 +56,7 @@ function Get-ZoneInfo {
     $url = "https://api.cloudflare.com/client/v4/zones/$ZoneId"
     $headers = @{
         "Authorization" = "Bearer $API_TOKEN"
-        "Content-Type" = "application/json"
+        "Content-Type"  = "application/json"
     }
     
     $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
@@ -77,7 +77,7 @@ function Get-DnsRecords {
     $url = "https://api.cloudflare.com/client/v4/zones/$ZoneId/dns_records"
     $headers = @{
         "Authorization" = "Bearer $API_TOKEN"
-        "Content-Type" = "application/json"
+        "Content-Type"  = "application/json"
     }
     
     $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
@@ -92,7 +92,7 @@ function Get-DnsRecords {
 
 function Main {
     param(
-        [Parameter(ValueFromRemainingArguments=$true)]
+        [Parameter(ValueFromRemainingArguments = $true)]
         $InputArgs
     )
     
@@ -121,10 +121,12 @@ function Main {
                 Write-Host "错误: 域名不能为空"
                 exit 1
             }
-        } elseif ($InputArgs.Count -eq 1) {
+        }
+        elseif ($InputArgs.Count -eq 1) {
             # 如果有一个参数，使用该参数作为域名
             $domain = $InputArgs[0]
-        } else {
+        }
+        else {
             # 如果参数过多，显示用法
             Write-Host "用法: $($MyInvocation.MyCommand.Name) [域名]"
             Write-Host "      如果不提供域名参数，程序将提示您输入"
